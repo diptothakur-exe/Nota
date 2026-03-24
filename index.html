@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Nota — Smart Notes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Figtree:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F3EDE2;
+  --surface: #FAF6EF;
+  --surface-2: #EDE6D8;
+  --text: #19160F;
+  --text-muted: #9A8F7C;
+  --accent: #3A6634;
+  --accent-light: #ECF3EB;
+  --border: #DDD4C2;
+  --shadow-sm: rgba(30,20,0,0.05);
+  --shadow: rgba(30,20,0,0.10);
+  --shadow-md: rgba(30,20,0,0.18);
+  --radius: 16px;
+}
+[data-theme="dark"] {
+  --bg: #121009;
+  --surface: #1C1914;
+  --surface-2: #232018;
+  --text: #EDE5D8;
+  --text-muted: #7A6F5E;
+  --accent: #81BC7D;
+  --accent-light: #1A2619;
+  --border: #2A2520;
+  --shadow-sm: rgba(0,0,0,0.2);
+  --shadow: rgba(0,0,0,0.35);
+  --shadow-md: rgba(0,0,0,0.55);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  font-family:'Figtree',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  min-height:100vh;
+  max-width:480px;
+  margin:0 auto;
+  transition:background .3s,color .3s;
+  overflow-x:hidden;
+  position:relative;
+}
+
+/* ── HEADER ── */
+.header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:22px 18px 10px;
+  position:sticky;top:0;z-index:100;
+  background:var(--bg);
+}
+.logo{
+  font-family:'Cormorant Garamond',serif;
+  font-size:28px;font-weight:600;letter-spacing:-0.5px;
+  color:var(--text);
+}
+.logo span{color:var(--accent);}
+.header-btns{display:flex;gap:8px;}
+.hbtn{
+  width:36px;height:36px;border:1px solid var(--border);
+  background:var(--surface);border-radius:10px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:15px;transition:all .15s;color:var(--text-muted);
+}
+.hbtn:active{transform:scale(.9);}
+
+/* ── SEARCH ── */
+.search-wrap{
+  padding:0 16px 10px;position:relative;
+  display:none;
+}
+.search-wrap.visible{display:block;}
+.search-icon-abs{
+  position:absolute;left:26px;top:50%;transform:translateY(-50%);
+  font-size:13px;color:var(--text-muted);pointer-events:none;
+}
+.search-input{
+  width:100%;height:38px;padding:0 12px 0 34px;
+  border:1.5px solid var(--border);border-radius:10px;
+  background:var(--surface);color:var(--text);
+  font-family:'Figtree',sans-serif;font-size:14px;outline:none;
+  transition:border-color .2s;
+}
+.search-input:focus{border-color:var(--accent);}
+.search-input::placeholder{color:var(--text-muted);}
+
+/* ── STAT CHIPS ── */
+.stats{padding:0 16px 6px;display:flex;gap:6px;}
+.chip{
+  font-size:11px;color:var(--text-muted);
+  background:var(--surface);border:1px solid var(--border);
+  padding:3px 10px;border-radius:20px;
+}
+
+/* ── NOTES LIST ── */
+.notes{padding:6px 14px 120px;display:flex;flex-direction:column;gap:10px;}
+
+/* ── EMPTY ── */
+.empty{
+  text-align:center;padding:64px 24px;
+  animation:fadeIn .4s ease;
+}
+.empty-orb{
+  font-size:38px;margin-bottom:18px;
+  opacity:.35;display:block;
+}
+.empty-h{
+  font-family:'Cormorant Garamond',serif;
+  font-size:22px;font-weight:600;
+  color:var(--text);opacity:.65;margin-bottom:8px;
+}
+.empty-p{font-size:13px;color:var(--text-muted);line-height:1.65;}
+
+/* ── NOTE WRAPPER (swipe) ── */
+.nwrap{
+  position:relative;border-radius:var(--radius);
+  overflow:hidden;
+  animation:slideUp .22s ease;
+}
+.swipe-hint{
+  position:absolute;inset:0;display:flex;
+  align-items:center;border-radius:var(--radius);
+  pointer-events:none;opacity:0;transition:opacity .15s;
+}
+.swipe-hint.right-bg{background:var(--accent);justify-content:flex-start;padding-left:18px;}
+.swipe-hint.left-bg{background:#D9534F;justify-content:flex-end;padding-right:18px;}
+.swipe-hint span{font-size:20px;color:#fff;}
+
+/* ── NOTE CARD ── */
+.card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:13px 15px 11px;
+  position:relative;
+  box-shadow:0 1px 4px var(--shadow-sm);
+  transition:box-shadow .2s,opacity .2s;
+  cursor:default;user-select:none;
+  touch-action:pan-y;
+}
+.card.dragging{opacity:.45;box-shadow:0 8px 28px var(--shadow-md);transform:scale(1.02);}
+.card.drag-over{border-color:var(--accent);background:var(--accent-light);}
+.card.completed .note-body{opacity:.45;text-decoration:line-through;}
+
+.drag-pip{
+  width:28px;height:3px;background:var(--border);
+  border-radius:2px;margin:0 auto 10px;
+}
+.card-top{
+  display:flex;align-items:flex-start;
+  justify-content:space-between;margin-bottom:8px;
+}
+.type-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.9px;
+  color:var(--accent);background:var(--accent-light);
+  padding:3px 8px;border-radius:20px;
+}
+.card-btns{display:flex;gap:3px;}
+.cbtn{
+  width:27px;height:27px;border:none;background:none;
+  cursor:pointer;border-radius:7px;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--text-muted);font-size:14px;transition:all .15s;
+}
+.cbtn:active{background:var(--surface-2);transform:scale(.88);}
+
+/* note content */
+.note-body{
+  font-size:14px;line-height:1.65;color:var(--text);
+  white-space:pre-wrap;word-break:break-word;
+}
+.todo-list{display:flex;flex-direction:column;gap:7px;}
+.todo-row{display:flex;align-items:flex-start;gap:8px;}
+.tcheck{
+  width:16px;height:16px;border:1.5px solid var(--border);
+  border-radius:4px;flex-shrink:0;margin-top:2px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .15s;font-size:10px;
+}
+.tcheck.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+.code-pre{
+  background:var(--surface-2);border-radius:8px;
+  padding:9px 11px;font-family:'SF Mono','Fira Code',monospace;
+  font-size:12px;overflow-x:auto;white-space:pre;
+  border:1px solid var(--border);
+}
+.card-meta{
+  font-size:11px;color:var(--text-muted);
+  margin-top:9px;
+}
+
+/* ── FAB ── */
+.fab{
+  position:fixed;bottom:26px;right:18px;
+  width:58px;height:58px;border-radius:18px;
+  background:var(--text);color:var(--bg);
+  border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-size:26px;font-weight:300;
+  box-shadow:0 4px 20px var(--shadow-md);
+  transition:transform .3s cubic-bezier(.34,1.56,.64,1),background .3s;
+  z-index:200;
+}
+.fab.open{transform:rotate(45deg);}
+.fab:active{transform:scale(.9);}
+.fab.open:active{transform:rotate(45deg) scale(.9);}
+
+/* ── BACKDROP ── */
+.backdrop{
+  position:fixed;inset:0;background:rgba(0,0,0,.32);
+  z-index:250;display:none;backdrop-filter:blur(3px);
+}
+.backdrop.on{display:block;}
+
+/* ── INPUT PANEL ── */
+.input-panel{
+  position:fixed;bottom:0;left:50%;
+  transform:translateX(-50%) translateY(105%);
+  width:100%;max-width:480px;
+  background:var(--surface);
+  border-top-left-radius:24px;border-top-right-radius:24px;
+  padding:14px 18px 36px;
+  z-index:300;
+  transition:transform .35s cubic-bezier(.32,.72,0,1);
+  box-shadow:0 -4px 32px var(--shadow-md);
+  border:1px solid var(--border);border-bottom:none;
+}
+.input-panel.open{transform:translateX(-50%) translateY(0);}
+.panel-grip{
+  width:36px;height:4px;background:var(--border);
+  border-radius:2px;margin:0 auto 14px;
+}
+.inp-label{
+  font-family:'Cormorant Garamond',serif;
+  font-size:17px;font-weight:500;color:var(--text-muted);
+  margin-bottom:10px;display:block;
+}
+.inp-area{
+  width:100%;min-height:110px;max-height:200px;
+  resize:none;border:1.5px solid var(--border);border-radius:12px;
+  padding:11px 13px;
+  font-family:'Figtree',sans-serif;font-size:15px;line-height:1.6;
+  background:var(--bg);color:var(--text);outline:none;
+  transition:border-color .2s;
+}
+.inp-area:focus{border-color:var(--accent);}
+.inp-area::placeholder{color:var(--text-muted);}
+.inp-actions{display:flex;gap:9px;margin-top:11px;align-items:center;}
+.btn-raw{
+  height:44px;padding:0 15px;
+  border:1.5px solid var(--border);border-radius:12px;
+  background:transparent;color:var(--text-muted);
+  font-family:'Figtree',sans-serif;font-size:14px;
+  cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.btn-raw:active{transform:scale(.97);}
+.btn-ai{
+  flex:1;height:44px;
+  border:none;border-radius:12px;
+  background:var(--text);color:var(--bg);
+  font-family:'Figtree',sans-serif;font-size:14px;font-weight:500;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;
+  transition:all .15s;
+}
+.btn-ai:active{transform:scale(.97);opacity:.85;}
+.btn-ai:disabled{opacity:.5;cursor:not-allowed;transform:none;}
+.spinner{
+  width:15px;height:15px;
+  border:2px solid rgba(255,255,255,.3);
+  border-top-color:#fff;
+  border-radius:50%;
+  animation:spin .65s linear infinite;
+}
+
+/* ── SUGGESTIONS OVERLAY ── */
+.sug-overlay{
+  position:fixed;inset:0;
+  background:rgba(0,0,0,.45);
+  z-index:400;display:none;
+  align-items:flex-end;justify-content:center;
+  backdrop-filter:blur(5px);
+}
+.sug-overlay.open{display:flex;}
+.sug-panel{
+  width:100%;max-width:480px;
+  background:var(--surface);
+  border-top-left-radius:24px;border-top-right-radius:24px;
+  padding:14px 18px 36px;
+  max-height:82vh;overflow-y:auto;
+  border:1px solid var(--border);border-bottom:none;
+}
+.sug-title{
+  font-family:'Cormorant Garamond',serif;
+  font-size:21px;font-weight:600;margin-bottom:3px;
+}
+.sug-sub{font-size:13px;color:var(--text-muted);margin-bottom:14px;}
+.sug-card{
+  background:var(--bg);border:1.5px solid var(--border);
+  border-radius:14px;padding:13px 14px;
+  margin-bottom:9px;cursor:pointer;
+  transition:all .2s;
+}
+.sug-card:hover{border-color:var(--accent);background:var(--accent-light);}
+.sug-card:active{transform:scale(.98);}
+.sug-head{display:flex;align-items:center;gap:7px;margin-bottom:7px;}
+.sug-icon{font-size:15px;}
+.sug-type{
+  font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.9px;color:var(--accent);
+}
+.sug-preview{
+  font-size:13px;color:var(--text);line-height:1.55;
+  white-space:pre-wrap;max-height:75px;overflow:hidden;
+}
+.btn-cancel-sug{
+  width:100%;height:42px;margin-top:6px;
+  border:1.5px solid var(--border);border-radius:12px;
+  background:transparent;color:var(--text-muted);
+  font-family:'Figtree',sans-serif;font-size:14px;cursor:pointer;
+}
+.btn-cancel-sug:active{transform:scale(.98);}
+
+/* ── ANIMATIONS ── */
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:0}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+  <div class="logo">Nota<span>.</span></div>
+  <div class="header-btns">
+    <button class="hbtn" id="searchBtn" title="Search">⌕</button>
+    <button class="hbtn" id="themeBtn" title="Toggle theme">◑</button>
+  </div>
+</header>
+
+<!-- Search -->
+<div class="search-wrap" id="searchWrap">
+  <span class="search-icon-abs">⌕</span>
+  <input class="search-input" id="searchInput" placeholder="Search notes…" type="text" autocomplete="off">
+</div>
+
+<!-- Stats -->
+<div class="stats" id="stats"></div>
+
+<!-- Notes List -->
+<div class="notes" id="notesList"></div>
+
+<!-- FAB -->
+<button class="fab" id="fab">+</button>
+
+<!-- Backdrop -->
+<div class="backdrop" id="backdrop"></div>
+
+<!-- Input Panel -->
+<div class="input-panel" id="inputPanel">
+  <div class="panel-grip"></div>
+  <span class="inp-label">What's on your mind?</span>
+  <textarea class="inp-area" id="inputArea" placeholder="Write anything… tasks, grocery, code, calculations, messy thoughts…" rows="5"></textarea>
+  <div class="inp-actions">
+    <button class="btn-raw" id="saveRawBtn">Save as-is</button>
+    <button class="btn-ai" id="formatBtn">
+      <span>⚡</span><span id="aiLabel">Format with AI</span>
+    </button>
+  </div>
+</div>
+
+<!-- Suggestions Overlay -->
+<div class="sug-overlay" id="sugOverlay">
+  <div class="sug-panel">
+    <div class="panel-grip"></div>
+    <div class="sug-title">Pick a format</div>
+    <div class="sug-sub">Tap any card to save it to your notes</div>
+    <div id="sugList"></div>
+    <button class="btn-cancel-sug" id="cancelSugBtn">Cancel</button>
+  </div>
+</div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────────
+let notes = [];
+try { notes = JSON.parse(localStorage.getItem('nota_v1') || '[]'); } catch(e){}
+let dark = localStorage.getItem('nota_theme') === 'dark';
+let panelOpen = false;
+let searchOpen = false;
+let searchQ = '';
+let dragSrc = null;
+
+// ── THEME ──────────────────────────────────────────────────────────
+function applyTheme() {
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  document.getElementById('themeBtn').textContent = dark ? '○' : '◑';
+}
+applyTheme();
+
+document.getElementById('themeBtn').addEventListener('click', () => {
+  dark = !dark;
+  localStorage.setItem('nota_theme', dark ? 'dark' : 'light');
+  applyTheme();
+});
+
+// ── PERSIST ────────────────────────────────────────────────────────
+function save() { localStorage.setItem('nota_v1', JSON.stringify(notes)); }
+
+// ── PANEL ──────────────────────────────────────────────────────────
+function openPanel() {
+  panelOpen = true;
+  document.getElementById('inputPanel').classList.add('open');
+  document.getElementById('backdrop').classList.add('on');
+  document.getElementById('fab').classList.add('open');
+  document.getElementById('fab').style.zIndex = 150;
+  setTimeout(() => document.getElementById('inputArea').focus(), 360);
+}
+function closePanel() {
+  panelOpen = false;
+  document.getElementById('inputPanel').classList.remove('open');
+  document.getElementById('backdrop').classList.remove('on');
+  document.getElementById('fab').classList.remove('open');
+  document.getElementById('fab').style.zIndex = 200;
+  document.getElementById('inputArea').value = '';
+  resetAIBtn();
+}
+
+document.getElementById('fab').addEventListener('click', () => {
+  panelOpen ? closePanel() : openPanel();
+});
+document.getElementById('backdrop').addEventListener('click', closePanel);
+
+function resetAIBtn() {
+  const btn = document.getElementById('formatBtn');
+  btn.disabled = false;
+  btn.innerHTML = '<span>⚡</span><span>Format with AI</span>';
+}
+
+// ── HELPERS ────────────────────────────────────────────────────────
+function esc(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function timeAgo(ts) {
+  if (!ts) return '';
+  const d = Date.now() - ts;
+  if (d < 60000) return 'just now';
+  if (d < 3600000) return Math.floor(d/60000) + 'm ago';
+  if (d < 86400000) return Math.floor(d/3600000) + 'h ago';
+  return new Date(ts).toLocaleDateString('en',{month:'short',day:'numeric'});
+}
+const TYPE_ICONS = {
+  todo:'✅', note:'📝', task:'📅',
+  calculation:'🧮', code:'💻', list:'🛒', raw:'✦'
+};
+
+// ── RENDER ─────────────────────────────────────────────────────────
+function renderStats() {
+  const total = notes.length;
+  const done = notes.filter(n => n.completed).length;
+  const s = document.getElementById('stats');
+  if (!total) { s.innerHTML=''; return; }
+  s.innerHTML = `<div class="chip">${total} note${total!==1?'s':''}</div>
+    ${done ? `<div class="chip">✓ ${done} done</div>` : ''}`;
+}
+
+function buildContent(n) {
+  if (n.type === 'todo' && n.todos) {
+    return `<div class="note-body"><div class="todo-list">
+      ${n.todos.map((t,ti) => `
+        <div class="todo-row">
+          <div class="tcheck${t.done?' on':''}" data-item="${ti}">${t.done?'✓':''}</div>
+          <span style="${t.done?'text-decoration:line-through;opacity:.5':''}">${esc(t.text)}</span>
+        </div>`).join('')}
+    </div></div>`;
+  }
+  if (n.type === 'code') {
+    return `<div class="code-pre">${esc(n.content)}</div>`;
+  }
+  return `<div class="note-body">${esc(n.content)}</div>`;
+}
+
+function buildCard(n, realIdx) {
+  const icon = TYPE_ICONS[n.type] || '✦';
+  return `
+    <div class="drag-pip"></div>
+    <div class="card-top">
+      <div class="type-badge">${icon} ${n.type||'note'}</div>
+      <div class="card-btns">
+        <button class="cbtn btn-complete" data-id="${n.id}" title="${n.completed?'Undo':'Complete'}">${n.completed?'↩':'✓'}</button>
+        <button class="cbtn btn-delete" data-id="${n.id}" title="Delete">✕</button>
+      </div>
+    </div>
+    ${buildContent(n)}
+    <div class="card-meta">${timeAgo(n.createdAt)}</div>`;
+}
+
+function render() {
+  renderStats();
+  const list = document.getElementById('notesList');
+  const shown = searchQ
+    ? notes.filter(n => JSON.stringify(n).toLowerCase().includes(searchQ.toLowerCase()))
+    : notes;
+
+  if (!shown.length) {
+    list.innerHTML = `<div class="empty">
+      <span class="empty-orb">✦</span>
+      <div class="empty-h">${searchQ ? 'Nothing found' : 'Your canvas is clear'}</div>
+      <div class="empty-p">${searchQ ? 'Try a different search' : 'Tap + to capture a thought,\nthen let AI shape it.'}</div>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = '';
+  shown.forEach((n, visIdx) => {
+    const realIdx = notes.indexOf(n);
+    const wrap = document.createElement('div');
+    wrap.className = 'nwrap';
+    wrap.innerHTML = `
+      <div class="swipe-hint right-bg"><span>✓</span></div>
+      <div class="swipe-hint left-bg"><span>🗑</span></div>`;
+
+    const card = document.createElement('div');
+    card.className = 'card' + (n.completed ? ' completed' : '');
+    card.draggable = true;
+    card.dataset.id = n.id;
+    card.innerHTML = buildCard(n, realIdx);
+
+    // ── Desktop drag ──
+    card.addEventListener('dragstart', e => {
+      dragSrc = realIdx;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('drag-over'); });
+    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+    card.addEventListener('drop', e => {
+      e.preventDefault();
+      card.classList.remove('drag-over');
+      if (dragSrc !== null && dragSrc !== realIdx) {
+        const [moved] = notes.splice(dragSrc, 1);
+        notes.splice(realIdx, 0, moved);
+        save(); render();
+      }
+    });
+
+    // ── Touch swipe ──
+    let tx0 = 0, ty0 = 0, swiping = false, curX = 0;
+    card.addEventListener('touchstart', e => {
+      tx0 = e.touches[0].clientX;
+      ty0 = e.touches[0].clientY;
+      swiping = false; curX = 0;
+    }, {passive:true});
+    card.addEventListener('touchmove', e => {
+      const dx = e.touches[0].clientX - tx0;
+      const dy = e.touches[0].clientY - ty0;
+      if (!swiping && Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8) swiping = true;
+      if (swiping) {
+        curX = dx;
+        card.style.transform = `translateX(${dx}px)`;
+        card.style.transition = 'none';
+        wrap.querySelector('.right-bg').style.opacity = dx > 0 ? Math.min(1, dx/70) : 0;
+        wrap.querySelector('.left-bg').style.opacity = dx < 0 ? Math.min(1, -dx/70) : 0;
+      }
+    }, {passive:true});
+    card.addEventListener('touchend', () => {
+      if (!swiping) return;
+      card.style.transition = 'transform .25s ease';
+      if (curX < -75) {
+        card.style.transform = 'translateX(-115%)';
+        setTimeout(() => { deleteNote(n.id); }, 240);
+      } else if (curX > 75) {
+        card.style.transform = 'translateX(0)';
+        toggleComplete(n.id);
+      } else {
+        card.style.transform = 'translateX(0)';
+        wrap.querySelector('.right-bg').style.opacity = 0;
+        wrap.querySelector('.left-bg').style.opacity = 0;
+      }
+    });
+
+    // ── Buttons ──
+    card.querySelector('.btn-complete').addEventListener('click', () => toggleComplete(n.id));
+    card.querySelector('.btn-delete').addEventListener('click', () => deleteNote(n.id));
+
+    // ── Todo checks ──
+    card.querySelectorAll('.tcheck').forEach(cb => {
+      cb.addEventListener('click', e => {
+        const ti = parseInt(e.currentTarget.dataset.item);
+        const note = notes.find(x => x.id === n.id);
+        if (note?.todos) {
+          note.todos[ti].done = !note.todos[ti].done;
+          save(); render();
+        }
+      });
+    });
+
+    wrap.appendChild(card);
+    list.appendChild(wrap);
+  });
+}
+
+function toggleComplete(id) {
+  const n = notes.find(x => x.id === id);
+  if (n) { n.completed = !n.completed; save(); render(); }
+}
+function deleteNote(id) {
+  notes = notes.filter(x => x.id !== id);
+  save(); render();
+}
+
+// ── SAVE RAW ──────────────────────────────────────────────────────
+document.getElementById('saveRawBtn').addEventListener('click', () => {
+  const text = document.getElementById('inputArea').value.trim();
+  if (!text) return;
+  notes.unshift({ id: Date.now(), type: 'raw', content: text, createdAt: Date.now(), completed: false });
+  save(); render(); closePanel();
+});
+
+// ── AI FORMAT ─────────────────────────────────────────────────────
+document.getElementById('formatBtn').addEventListener('click', async () => {
+  if (btn.disabled) return;
+  const text = document.getElementById('inputArea').value.trim();
+  if (text.length > 2000) {
+  alert("Input too long (max 2000 characters)");
+  return;
+}
+  if (!text) return;
+
+  const btn = document.getElementById('formatBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div><span>Thinking…</span>';
+  // ✅ ADD THIS BLOCK
+const failSafe = setTimeout(() => {
+  if (btn.disabled) {
+    resetAIBtn();
+    alert("AI is taking too long. Try again.");
+  }
+}, 9000);
+
+  try {
+    const suggestions = await callAI(text);
+    clearTimeout(failSafe);
+    closePanel();
+    showSuggestions(suggestions);
+  } catch(err) {
+    clearTimeout(failSafe);
+    alert('Could not reach AI: ' + err.message);
+    resetAIBtn();
+  }
+});
+
+async function callAI(input) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const res = await fetch("http://localhost:3000/format", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ input }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeout);
+
+    if (!res.ok) throw new Error("Server error");
+
+    const data = await res.json();
+
+    if (!data.suggestions || !data.suggestions.length) {
+      throw new Error("Empty AI response");
+    }
+
+    return data.suggestions;
+
+  } catch (err) {
+    clearTimeout(timeout);
+
+    return [{
+      type: "note",
+      icon: "📝",
+      title: "Quick Note",
+      content: input
+    }];
+  }
+}
+
+// ── SUGGESTIONS ──────────────────────────────────────────────────
+let pendingSuggestions = [];
+
+function showSuggestions(suggestions) {
+  pendingSuggestions = suggestions;
+  const list = document.getElementById('sugList');
+  list.innerHTML = suggestions.map((s, i) => `
+    <div class="sug-card" data-idx="${i}">
+      <div class="sug-head">
+        <span class="sug-icon">${s.icon||'✦'}</span>
+        <span class="sug-type">${s.title||s.type}</span>
+      </div>
+      <div class="sug-preview">${previewSug(s)}</div>
+    </div>`).join('');
+
+  document.getElementById('sugOverlay').classList.add('open');
+
+  list.querySelectorAll('.sug-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const s = pendingSuggestions[parseInt(card.dataset.idx)];
+      notes.unshift({
+        id: Date.now(), type: s.type,
+        content: s.content || '',
+        todos: s.todos || null,
+        createdAt: Date.now(), completed: false
+      });
+      save(); render();
+      document.getElementById('sugOverlay').classList.remove('open');
+    });
+  });
+}
+
+function previewSug(s) {
+  if (s.type === 'todo' && s.todos) {
+    return s.todos.slice(0,3).map(t => `☐ ${esc(t.text)}`).join('\n')
+      + (s.todos.length > 3 ? `\n+ ${s.todos.length-3} more…` : '');
+  }
+  if (s.type === 'code') {
+    return `<code style="font-family:'SF Mono',monospace;font-size:12px">${esc((s.content||'').slice(0,100))}</code>`;
+  }
+  return esc((s.content||'').slice(0,130));
+}
+
+document.getElementById('cancelSugBtn').addEventListener('click', () => {
+  document.getElementById('sugOverlay').classList.remove('open');
+});
+
+// ── SEARCH ───────────────────────────────────────────────────────
+document.getElementById('searchBtn').addEventListener('click', () => {
+  searchOpen = !searchOpen;
+  document.getElementById('searchWrap').classList.toggle('visible', searchOpen);
+  if (searchOpen) document.getElementById('searchInput').focus();
+  else { searchQ = ''; document.getElementById('searchInput').value = ''; render(); }
+});
+document.getElementById('searchInput').addEventListener('input', e => {
+  searchQ = e.target.value; render();
+});
+
+// ── KEYBOARD ──────────────────────────────────────────────────────
+document.getElementById('inputArea').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.shiftKey) {
+    e.preventDefault();
+    document.getElementById('saveRawBtn').click();
+  }
+});
+
+// ── INIT ──────────────────────────────────────────────────────────
+render();
+</script>
+</body>
+</html>

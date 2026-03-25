@@ -326,6 +326,38 @@ body{
   font-family:'Figtree',sans-serif;font-size:14px;cursor:pointer;
 }
 .btn-cancel-sug:active{transform:scale(.98);}
+.sug-selected {
+  border-color: var(--accent) !important;
+  background: var(--accent-light) !important;
+}
+.sug-check {
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.btn-save-sug {
+  width: 100%;
+  height: 44px;
+  margin-top: 6px;
+  border: none;
+  border-radius: 12px;
+  background: var(--text);
+  color: var(--bg);
+  font-family: 'Figtree', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: opacity .15s;
+}
+.btn-save-sug:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+.btn-save-sug:active:not(:disabled) {
+  transform: scale(.98);
+}
 
 /* ── ANIMATIONS ── */
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -385,6 +417,8 @@ body{
     <div class="sug-title">Pick a format</div>
     <div class="sug-sub">Tap any card to save it to your notes</div>
     <div id="sugList"></div>
+
+<button class="btn-save-sug" id="saveSugBtn" disabled>Select a format</button>
     <button class="btn-cancel-sug" id="cancelSugBtn">Cancel</button>
   </div>
 </div>
@@ -473,7 +507,7 @@ function renderStats() {
 }
 
 function buildContent(n) {
-  if (n.type === 'todo' && n.todos) {
+  if (n.todos && n.todos.length) {
     return `<div class="note-body"><div class="todo-list">
       ${n.todos.map((t,ti) => `
         <div class="todo-row">
@@ -628,43 +662,37 @@ document.getElementById('saveRawBtn').addEventListener('click', () => {
 
 // ── AI FORMAT ─────────────────────────────────────────────────────
 document.getElementById('formatBtn').addEventListener('click', async () => {
-  if (btn.disabled) return;
-  const text = document.getElementById('inputArea').value.trim();
-  if (text.length > 2000) {
-  alert("Input too long (max 2000 characters)");
-  return;
+
+// ✅ ALWAYS declare FIRST
+const btn = document.getElementById('formatBtn');
+
+if (btn.disabled) return;
+
+const text = document.getElementById('inputArea').value.trim();
+if (!text) return;
+
+btn.disabled = true;
+btn.innerHTML = '<div class="spinner"></div><span>Thinking…</span>';
+
+try {
+  const suggestions = await callAI(text);
+
+  closePanel();
+  showSuggestions(suggestions);
+
+} catch (err) {
+  console.error(err);
+  alert("AI failed");
+  resetAIBtn();
 }
-  if (!text) return;
-
-  const btn = document.getElementById('formatBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<div class="spinner"></div><span>Thinking…</span>';
-  // ✅ ADD THIS BLOCK
-const failSafe = setTimeout(() => {
-  if (btn.disabled) {
-    resetAIBtn();
-    alert("AI is taking too long. Try again.");
-  }
-}, 9000);
-
-  try {
-    const suggestions = await callAI(text);
-    clearTimeout(failSafe);
-    closePanel();
-    showSuggestions(suggestions);
-  } catch(err) {
-    clearTimeout(failSafe);
-    alert('Could not reach AI: ' + err.message);
-    resetAIBtn();
-  }
 });
 
 async function callAI(input) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+  const timeout = setTimeout(() => controller.abort(), 30000);
 
   try {
-    const res = await fetch("http://localhost:3000/format", {
+    const res = await fetch("http://localhost:5000/format", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -687,6 +715,7 @@ async function callAI(input) {
 
   } catch (err) {
     clearTimeout(timeout);
+    console.error("callAI failed:", err); // ← add this line
 
     return [{
       type: "note",
@@ -703,11 +732,14 @@ let pendingSuggestions = [];
 function showSuggestions(suggestions) {
   pendingSuggestions = suggestions;
   const list = document.getElementById('sugList');
+  const selected = new Set();
+
   list.innerHTML = suggestions.map((s, i) => `
     <div class="sug-card" data-idx="${i}">
       <div class="sug-head">
         <span class="sug-icon">${s.icon||'✦'}</span>
         <span class="sug-type">${s.title||s.type}</span>
+        <span class="sug-check" id="chk-${i}">○</span>
       </div>
       <div class="sug-preview">${previewSug(s)}</div>
     </div>`).join('');
@@ -716,28 +748,53 @@ function showSuggestions(suggestions) {
 
   list.querySelectorAll('.sug-card').forEach(card => {
     card.addEventListener('click', () => {
-      const s = pendingSuggestions[parseInt(card.dataset.idx)];
-      notes.unshift({
-        id: Date.now(), type: s.type,
-        content: s.content || '',
-        todos: s.todos || null,
-        createdAt: Date.now(), completed: false
-      });
-      save(); render();
-      document.getElementById('sugOverlay').classList.remove('open');
+      const idx = parseInt(card.dataset.idx);
+      if (selected.has(idx)) {
+        selected.delete(idx);
+        card.classList.remove('sug-selected');
+        card.querySelector('.sug-check').textContent = '○';
+      } else {
+        selected.add(idx);
+        card.classList.add('sug-selected');
+        card.querySelector('.sug-check').textContent = '✓';
+      }
+      // update save button
+      const count = selected.size;
+      document.getElementById('saveSugBtn').textContent =
+        count === 0 ? 'Select a format' : `Save ${count} note${count > 1 ? 's' : ''}`;
+      document.getElementById('saveSugBtn').disabled = count === 0;
     });
   });
+
+  // save button
+  document.getElementById('saveSugBtn').onclick = () => {
+    selected.forEach(idx => {
+      const s = pendingSuggestions[idx];
+      notes.unshift({
+        id: Date.now() + idx,
+        type: s.type,
+        content: s.content || '',
+        todos: s.todos || null,
+        createdAt: Date.now(),
+        completed: false
+      });
+    });
+    save(); render();
+    document.getElementById('sugOverlay').classList.remove('open');
+  };
 }
 
 function previewSug(s) {
-  if (s.type === 'todo' && s.todos) {
+  // handle todos on any type, not just "todo"
+  if (s.todos && s.todos.length) {
     return s.todos.slice(0,3).map(t => `☐ ${esc(t.text)}`).join('\n')
       + (s.todos.length > 3 ? `\n+ ${s.todos.length-3} more…` : '');
   }
   if (s.type === 'code') {
     return `<code style="font-family:'SF Mono',monospace;font-size:12px">${esc((s.content||'').slice(0,100))}</code>`;
   }
-  return esc((s.content||'').slice(0,130));
+  // fallback: show title if content is empty
+  return esc((s.content || s.title || '').slice(0, 130));
 }
 
 document.getElementById('cancelSugBtn').addEventListener('click', () => {

@@ -1,0 +1,202 @@
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import OpenAI from "openai";
+
+dotenv.config();
+
+const express = require('express');
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const { processInput } = require('./utils/formatter');
+app.post('/format', (req, res) => {
+  const { text } = req.body;
+  const result = processInput(text);
+  res.json(result);
+});
+
+app.listen(3000, () => {
+  console.log('Server running on port 3000');
+});
+
+// 🔐 OpenRouter client
+const client = new OpenAI({
+  apiKey: process.env.OPENROUTER_API_KEY,
+  baseURL: "https://openrouter.ai/api/v1"
+});
+
+// 🔥 AI ROUTE
+app.post("/format", async (req, res) => {
+  const text = (req.body.text || "").trim();
+
+  // 🛡️ Validation
+  if (!text) {
+    return res.json({ suggestions: [] });
+  }
+
+  if (text.length < 2) {
+    return res.status(400).json({ error: "Too short input" });
+  }
+
+  if (text.length > 2000) {
+    return res.status(400).json({ error: "Text too long" });
+  }
+
+  try {
+    const completion = await client.chat.completions.create(
+      {
+        model: "deepseek/deepseek-chat",
+        temperature: 0.2,
+
+        messages: [
+          {
+            role: "system",
+            content: `
+You are a smart AI formatter.
+
+Convert messy input into structured outputs.
+
+Return STRICT valid JSON only.
+
+FORMAT:
+
+  {
+    "suggestions": [
+      {
+        "type": "todo|note|task|calculation|code|list",
+        "icon": "emoji",
+        "title": "short label",
+        "content": "text",
+        "todos": [{"text": "item", "done": false}]
+      }
+    ]
+  }
+
+{
+  "suggestions": [
+    {
+      "type": "todo | note | task | calculation | code | list",
+      "icon": "single emoji",
+      "title": "clear, concise label (max 6 words)",
+      "content": "cleaned and structured text",
+      "priority": "high | medium | low",
+      "todos": [
+        {
+          "text": "task item",
+          "done": false
+        }
+      ]
+    }
+  ]
+}
+
+RULES:
+- Extract date/time into "due" field if present
+- Do NOT remove time-related information
+- Keep "content" clean (action only), move metadata separately
+- Output MUST be valid JSON
+- Do NOT include markdown (no \`\`\`)
+- Do NOT include explanation
+- Do NOT include any text before or after JSON
+- Always include "suggestions" array
+- Fix spelling and grammar
+- Detect intent and create multiple suggestions if relevant
+            `,
+          },
+          {
+            role: "user",
+            content: text,
+          },
+        ],
+      },
+      {
+        headers: {
+          "HTTP-Referer": "http://localhost:3000",
+          "X-Title": "Nota App"
+        }
+      }
+    );
+
+    // ✅ Safe extraction
+    let text = completion?.choices?.[0]?.message?.content || "";
+
+    // 🧹 Clean markdown wrappers if any
+    text = text
+      .replace(/```json/gi, "")
+      .replace(/```/g, "")
+      .trim();
+
+    let parsed;
+
+    try {
+      // ✅ Direct parse
+      parsed = JSON.parse(text);
+
+    } catch (err1) {
+
+      try {
+        // 🧠 Extract JSON from messy text
+        const match = text.match(/\{[\s\S]*\}/);
+
+        if (match) {
+          parsed = JSON.parse(match[0]);
+        } else {
+          throw new Error("No JSON found");
+        }
+
+      } catch (err2) {
+
+        console.error("⚠️ JSON PARSE FAILED:", text);
+
+        // 🛟 Final fallback
+        parsed = {
+          suggestions: [
+            {
+              type: "note",
+              icon: "📝",
+              title: "Quick Note",
+              content: input
+            }
+          ]
+        };
+      }
+    }
+
+    // 🛡️ Ensure structure
+    if (!parsed.suggestions || !Array.isArray(parsed.suggestions)) {
+      parsed = {
+        suggestions: [
+          {
+            type: "note",
+            icon: "📝",
+            title: "Fallback",
+            content: input
+          }
+        ]
+      };
+    }
+
+    res.json(parsed);
+
+  } catch (err) {
+    console.error("AI ERROR:", err.response?.data || err.message);
+
+    res.status(500).json({
+      suggestions: [
+        {
+          type: "note",
+          icon: "📝",
+          title: "Fallback",
+          content: input,
+        },
+      ],
+    });
+  }
+});
+
+// 🚀 Start server
+app.listen(3000, () => {
+  console.log("✅ Server running at http://localhost:3000");
+});

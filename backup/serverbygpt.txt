@@ -1,0 +1,151 @@
+const express = require("express");
+const cors = require("cors");
+const dotenv = require("dotenv");
+const OpenAI = require("openai");
+
+dotenv.config();
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const { processInput } = require("./utils/formatter");
+
+// 🔐 OpenRouter client
+const client = new OpenAI({
+  apiKey: process.env.OPENROUTER_API_KEY,
+  baseURL: "https://openrouter.ai/api/v1"
+});
+
+// 🔥 SINGLE /format route (AI + fallback)
+app.post("/format", async (req, res) => {
+  const text = (req.body.text || "").trim();
+
+  if (!text) {
+    return res.json({ suggestions: [] });
+  }
+
+  if (text.length < 2) {
+    return res.status(400).json({ error: "Too short input" });
+  }
+
+  if (text.length > 2000) {
+    return res.status(400).json({ error: "Text too long" });
+  }
+
+  try {
+    const completion = await client.chat.completions.create(
+      {
+        model: "deepseek/deepseek-chat",
+        temperature: 0.2,
+        messages: [
+          {
+            role: "system",
+            content: `
+            You are a smart AI formatter.
+
+Convert messy input into structured outputs.
+
+Return STRICT valid JSON only.
+
+FORMAT:
+
+  {
+    "suggestions": [
+      {
+        "type": "todo|note|task|calculation|code|list",
+        "icon": "emoji",
+        "title": "short label",
+        "content": "text",
+        "todos": [{"text": "item", "done": false}]
+      }
+    ]
+  }
+
+{
+  "suggestions": [
+    {
+      "type": "todo | note | task | calculation | code | list",
+      "icon": "single emoji",
+      "title": "clear, concise label (max 6 words)",
+      "content": "cleaned and structured text",
+      "priority": "high | medium | low",
+      "todos": [
+        {
+          "text": "task item",
+          "done": false
+        }
+      ]
+    }
+  ]
+}
+
+RULES:
+- Extract date/time into "due" field if present
+- Do NOT remove time-related information
+- Keep "content" clean (action only), move metadata separately
+- Output MUST be valid JSON
+- Do NOT include markdown (no \`\`\`)
+- Do NOT include explanation
+- Do NOT include any text before or after JSON
+- Always include "suggestions" array
+- Fix spelling and grammar
+- Detect intent and create multiple suggestions if relevant
+`
+          },
+          {
+            role: "user",
+            content: text
+          }
+        ]
+      },
+      {
+        headers: {
+          "HTTP-Referer": "http://localhost:3000",
+          "X-Title": "Nota App"
+        }
+      }
+    );
+
+    // ✅ DO NOT overwrite text
+    let aiResponse = completion?.choices?.[0]?.message?.content || "";
+
+    // clean markdown
+    aiResponse = aiResponse
+      .replace(/```json/gi, "")
+      .replace(/```/g, "")
+      .trim();
+
+    let parsed;
+
+    try {
+      parsed = JSON.parse(aiResponse);
+    } catch {
+      const match = aiResponse.match(/\{[\s\S]*\}/);
+
+      if (match) {
+        parsed = JSON.parse(match[0]);
+      } else {
+        throw new Error("No JSON");
+      }
+    }
+
+    // 🛡️ ensure structure
+    if (!parsed.suggestions || !Array.isArray(parsed.suggestions)) {
+      throw new Error("Invalid structure");
+    }
+
+    return res.json(parsed);
+
+  } catch (err) {
+    console.log("⚠️ AI failed, using fallback");
+
+    const fallback = processInput(text);
+    return res.json(fallback);
+  }
+});
+
+// 🚀 Start server (ONLY ONCE)
+app.listen(3000, () => {
+  console.log("✅ Server running at http://localhost:3000");
+});
